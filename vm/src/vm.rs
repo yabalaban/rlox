@@ -1,106 +1,85 @@
-use common::chunks;
-use common::chunks::Chunk;
-use common::opcode::OpCode;
-use common::opcode::types::Value;
-use utils::OpCodeTable;
+use common::chunk;
+use common::types;
 
 use crate::InterpretResult;
 use crate::Interpreter;
-use crate::InterpreterDebug;
 
 #[derive(Debug)]
-pub(crate) struct VM {
-    pub(crate) chunk: Chunk,
-    pub(crate) stack: Vec<Value>,
+pub struct VM {
+    pub chunk: chunk::Chunk,
+    pub stack: Vec<types::Value>,
+    pub ip: usize,
+}
+
+pub(crate) fn make() -> VM {
+    VM {
+        chunk: chunk::make(),
+        stack: Vec::new(),
+        ip: 0,
+    }
 }
 
 impl Interpreter for VM {
     fn interpret(&mut self, source: &String) -> InterpretResult {
-        let mut chunk = chunks::make();
-        compiler::compile(source);
-        InterpretResult::Ok
-    }
-}
-
-impl InterpreterDebug for VM {
-    fn print_code(&self) {
-        println!("== Chunk ==");
-        let mut offset = 0;
-        let chunk = &self.chunk;
-        for idx in 0..chunk.code.len() {
-            let opcode = &chunk.code[idx];
-            println!("{:04}\t{}\t{:?}", offset, chunk.lines[idx], opcode);
-            offset += opcode.offset();
-        }
-    }
-
-    fn print_stack(&self) {
-        println!("== Stack ==");
-        let stack = &self.stack;
-        for idx in (0..stack.len()).rev() {
-            println!("{}\t{}", idx, stack[idx]);
+        let mut chunk = chunk::make();
+        if !compiler::compile(&mut chunk, source) {
+            InterpretResult::CompilationError
+        } else {
+            self.reset(chunk);
+            self.run()
         }
     }
 }
 
 impl VM {
-    pub fn run(&mut self) -> InterpretResult {
-        let chunk = &self.chunk;
-        for opcode in &chunk.code {
+    fn read_byte(&mut self) -> types::OpCode {
+        let ip = self.ip;
+        self.ip += 1;
+        self.chunk.code[ip]
+    }
+
+    fn read_constant(&mut self) -> types::Value {
+        let code = self.read_byte() as usize;
+        self.chunk.constants[code]
+    }
+}
+
+impl VM {
+    pub(crate) fn run(&mut self) -> InterpretResult {
+        use common::opcode::ByteCode;
+        loop {
+            let opcode = self.read_byte();
             match opcode {
-                OpCode::Add => {
-                    match self.stack.pop() {
-                        Some(val1) => {
-                            if let Some(val) = self.stack.last_mut() {
-                                *val = *val + val1;
-                            }
-                        },
-                        None => panic!("Stack underflow"),
-                    }
+                ByteCode::RETURN => {
+                    println!("{}", self.stack.pop().unwrap());
+                    return InterpretResult::Ok
                 },
-                OpCode::Subtract => {
-                    match self.stack.pop() {
-                        Some(val1) => {
-                            if let Some(val) = self.stack.last_mut() {
-                                *val = *val - val1;
-                            }
-                        },
-                        None => panic!("Stack underflow"),
-                    }
+                ByteCode::NEGATE => {
+                    let value = self.stack.pop().unwrap();
+                    self.stack.push(-1.0 * value)
                 },
-                OpCode::Multiply => {
-                    match self.stack.pop() {
-                        Some(val1) => {
-                            if let Some(val) = self.stack.last_mut() {
-                                *val =  *val * val1;
-                            }
-                        },
-                        None => panic!("Stack underflow"),
-                    }
+                ByteCode::CONSTANT => {
+                    let value = self.read_constant();
+                    self.stack.push(value)
                 },
-                OpCode::Divide => {
-                    match self.stack.pop() {
-                        Some(val1) => {
-                            if val1 == 0.0 {
-                                return InterpretResult::RuntimeError;
-                            } else if let Some(val) = self.stack.last_mut() {
-                                *val = *val / val1;
-                            }
-                        },
-                        None => panic!("Stack underflow"),
-                    }
-                }
-                OpCode::Return => return InterpretResult::Ok,
-                OpCode::Negate => {
-                    if let Some(val) = self.stack.last_mut() {
-                        *val = -1.0 * *val;
-                    }
-                }
-                OpCode::Constant(val) => {
-                    self.stack.push(*val);
-                },
+                ByteCode::ADD => self.binary(std::ops::Add::add),
+                ByteCode::SUBTRACT => self.binary(std::ops::Sub::sub),
+                ByteCode::MULTIPLY => self.binary(std::ops::Mul::mul),
+                ByteCode::DIVIDE => self.binary(std::ops::Div::div),
+                _ => (), 
             }
         }
-        InterpretResult::RuntimeError
+    }
+
+    pub(crate) fn reset(&mut self, chunk: chunk::Chunk) {
+        self.chunk = chunk;
+        self.stack = Vec::new();
+        self.ip = 0;
+    }
+
+    pub(crate) fn binary(&mut self, op: fn(types::Value, types::Value) -> types::Value) {
+        let a = self.stack.pop().unwrap();
+        let b = self.stack.pop().unwrap();
+        self.stack.push(op(a, b));
     }
 }

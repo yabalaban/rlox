@@ -2,8 +2,8 @@ use std::env;
 use std::fs;
 use std::process;
 
+use debug;
 use vm::Interpreter;
-use vm::InterpreterDebug;
 use vm::InterpretResult;
 
 fn main() {
@@ -19,7 +19,7 @@ fn main() {
     }
 }
 
-fn repl(vm: &mut (impl Interpreter + InterpreterDebug)) {
+fn repl(vm: &mut vm::VM) {
     use std::io::{self, BufRead, Write};
     use colored::*;
 
@@ -35,11 +35,11 @@ fn repl(vm: &mut (impl Interpreter + InterpreterDebug)) {
         if let Some(line) = lines.next() {
             let line = line.expect("Error: unable to read user input");
             if line == "@stack" {
-                vm.print_stack();
+                debug::vm_stack(vm);
                 break;
             }
-            if line == "@code" {
-                vm.print_code();
+            if line == "@chunk" {
+                debug::vm_chunk(vm);
                 break;
             }
             let res = &vm.interpret(&line);
@@ -60,7 +60,7 @@ fn repl(vm: &mut (impl Interpreter + InterpreterDebug)) {
     }
 }
 
-fn run_file(vm: &mut (impl Interpreter + InterpreterDebug), path: &String) {
+fn run_file(vm: &mut vm::VM, path: &String) {
     let contents = fs::read_to_string(path)
         .expect("Error: unable to read file");
     let res = &vm.interpret(&contents);

@@ -1,7 +1,13 @@
+use common::chunk;
 use scanner::token;
-use common::opcode::OpCode;
 
-pub fn compile(source: &String) -> Option<Vec<OpCode>> {
+// struct Parser {
+//     previous: token::Token,
+//     current: token::Token,
+//     had_error: bool,
+// }
+
+pub fn compile(_chunk: &mut chunk::Chunk, source: &String) -> bool {
     let mut scanner = scanner::make(source);
     let mut line = 0;
 
@@ -15,9 +21,12 @@ pub fn compile(source: &String) -> Option<Vec<OpCode>> {
         }
 
         if matches!(token.ty, token::Type::Eof) {
-            return None;
+            return true;
         }
     }
-
-    panic!("EOF is missing in input");
+    false
 }
+
+// fn advance(parser: &mut Parser) {
+    // parser.previous = parser.current;
+// }
